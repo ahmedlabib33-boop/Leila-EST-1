@@ -10,3 +10,4 @@ __pycache__/
 .env
 .env.*
 .streamlit/secrets.toml
+data/iptv_login.json

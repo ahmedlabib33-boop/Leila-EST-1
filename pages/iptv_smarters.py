@@ -1,9 +1,56 @@
+from pathlib import Path
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 import json
 import re
 
 import streamlit as st
+
+
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "iptv_login.json"
+
+
+def _load_saved_login():
+    if not CONFIG_PATH.exists():
+        return {}
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_login(server_url, username, password):
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(
+        json.dumps(
+            {
+                "server_url": server_url,
+                "username": username,
+                "password": password,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _forget_saved_login():
+    try:
+        CONFIG_PATH.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _apply_saved_login_defaults():
+    saved = _load_saved_login()
+    defaults = {
+        "iptv_server_url": saved.get("server_url", ""),
+        "iptv_username": saved.get("username", ""),
+        "iptv_password": saved.get("password", ""),
+    }
+    for key, value in defaults.items():
+        if value and not st.session_state.get(key):
+            st.session_state[key] = value
 
 
 def _normalize_server(server_url):
@@ -37,6 +84,10 @@ def _stream_url(server_url, username, password, stream_id, ext):
     return urljoin(server_url, f"live/{username}/{password}/{stream_id}.{ext}")
 
 
+def _movie_url(server_url, username, password, stream_id, ext):
+    return urljoin(server_url, f"movie/{username}/{password}/{stream_id}.{ext}")
+
+
 def _parse_m3u(text):
     channels = []
     title = ""
@@ -68,7 +119,7 @@ def _parse_m3u(text):
 
 def _play_stream(stream_url):
     st.video(stream_url)
-    st.caption("If a channel does not play, the provider may block browser playback or require its own app.")
+    st.caption("If it does not play, the provider may block browser playback or require its own app.")
 
 
 def _show_direct_player():
@@ -118,24 +169,38 @@ def _show_direct_player():
 
 
 def _show_xtream_player():
-    st.subheader("Xtream Codes IPTV Login")
-    st.write("Enter legal IPTV provider details. They are kept only in the current running app session.")
+    st.subheader("Xtream Codes IPTV / imediaTELLY Login")
+    _apply_saved_login_defaults()
+    st.write("Enter legal IPTV provider details. The saved login is used for both Live TV and Movies.")
 
     server_url = _normalize_server(
         st.text_input("Server URL", key="iptv_server_url", placeholder="http://provider-server.com:8080")
     )
     username = st.text_input("Username", key="iptv_username")
     password = st.text_input("Password", key="iptv_password", type="password")
-    ext = st.selectbox("Stream format", ["m3u8", "ts"], index=0)
+    content_type = st.radio("What do you want to watch?", ["Live TV", "Movies"], horizontal=True)
+    ext = st.selectbox("Stream format", ["m3u8", "ts", "mp4", "mkv"], index=0)
 
     col1, col2 = st.columns(2)
     with col1:
-        load_categories = st.button("Load IPTV Categories", use_container_width=True)
+        load_categories = st.button("Load Categories", use_container_width=True)
     with col2:
         clear_login = st.button("Clear IPTV Login", use_container_width=True)
 
+    remember_login = st.checkbox("Remember login in this app", value=CONFIG_PATH.exists())
+    if remember_login and server_url and username and password:
+        _save_login(server_url, username, password)
+
     if clear_login:
-        for key in ["iptv_server_url", "iptv_username", "iptv_password", "iptv_categories", "iptv_streams"]:
+        _forget_saved_login()
+        for key in [
+            "iptv_server_url",
+            "iptv_username",
+            "iptv_password",
+            "iptv_categories",
+            "iptv_streams",
+            "iptv_movies",
+        ]:
             st.session_state.pop(key, None)
         st.rerun()
 
@@ -149,8 +214,11 @@ def _show_xtream_player():
                 if str(user_info.get("auth", "1")) == "0":
                     st.error("The provider rejected this login.")
                 else:
-                    categories = _fetch_json(_xtream_url(server_url, username, password, action="get_live_categories"))
+                    action = "get_live_categories" if content_type == "Live TV" else "get_vod_categories"
+                    categories = _fetch_json(_xtream_url(server_url, username, password, action=action))
                     st.session_state.iptv_categories = categories if isinstance(categories, list) else []
+                    st.session_state.iptv_streams = []
+                    st.session_state.iptv_movies = []
                     st.success(f"Loaded {len(st.session_state.iptv_categories)} categories.")
             except Exception as exc:
                 st.error(f"Could not connect to IPTV provider: {exc}")
@@ -162,21 +230,29 @@ def _show_xtream_player():
             categories,
             format_func=lambda item: item.get("category_name", "Category"),
         )
-        if st.button("Load Channels", use_container_width=True):
+        load_label = "Load Channels" if content_type == "Live TV" else "Load Movies"
+        if st.button(load_label, use_container_width=True):
             try:
+                action = "get_live_streams" if content_type == "Live TV" else "get_vod_streams"
                 streams = _fetch_json(
                     _xtream_url(
                         server_url,
                         username,
                         password,
-                        action="get_live_streams",
+                        action=action,
                         category_id=category.get("category_id"),
                     )
                 )
-                st.session_state.iptv_streams = streams if isinstance(streams, list) else []
-                st.success(f"Loaded {len(st.session_state.iptv_streams)} channels.")
+                if content_type == "Live TV":
+                    st.session_state.iptv_streams = streams if isinstance(streams, list) else []
+                    st.session_state.iptv_movies = []
+                    st.success(f"Loaded {len(st.session_state.iptv_streams)} channels.")
+                else:
+                    st.session_state.iptv_movies = streams if isinstance(streams, list) else []
+                    st.session_state.iptv_streams = []
+                    st.success(f"Loaded {len(st.session_state.iptv_movies)} movies.")
             except Exception as exc:
-                st.error(f"Could not load channels: {exc}")
+                st.error(f"Could not load items: {exc}")
 
     streams = st.session_state.get("iptv_streams", [])
     if streams:
@@ -186,11 +262,20 @@ def _show_xtream_player():
         if selected:
             _play_stream(_stream_url(server_url, username, password, selected.get("stream_id"), ext))
 
+    movies = st.session_state.get("iptv_movies", [])
+    if movies:
+        search = st.text_input("Search movies", key="iptv_movie_search")
+        filtered = [movie for movie in movies if not search or search.lower() in movie.get("name", "").lower()]
+        selected = st.selectbox("Choose movie", filtered, format_func=lambda movie: movie.get("name", "Movie"))
+        if selected:
+            movie_ext = selected.get("container_extension") or ext
+            _play_stream(_movie_url(server_url, username, password, selected.get("stream_id"), movie_ext))
+
 
 def show_iptv_smarters():
-    st.title("IPTVSmartersPro")
+    st.title("IPTVSmartersPro / imediaTELLY")
     st.info(
-        "This slide plays legal IPTV streams inside the program when the provider supports browser playback. "
+        "This slide plays legal IPTV live channels and movies inside the program when the provider supports browser playback. "
         "Use only an IPTV subscription you are allowed to use."
     )
 
