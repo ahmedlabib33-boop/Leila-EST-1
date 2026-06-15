@@ -11,6 +11,17 @@ CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "iptv_login.json"
 
 
 def _load_saved_login():
+    try:
+        iptv_secrets = st.secrets.get("iptv", {})
+        if iptv_secrets:
+            return {
+                "server_url": iptv_secrets.get("server_url", ""),
+                "username": iptv_secrets.get("username", ""),
+                "password": iptv_secrets.get("password", ""),
+            }
+    except Exception:
+        pass
+
     if not CONFIG_PATH.exists():
         return {}
     try:
@@ -171,7 +182,12 @@ def _show_direct_player():
 def _show_xtream_player():
     st.subheader("Xtream Codes IPTV / imediaTELLY Login")
     _apply_saved_login_defaults()
+    saved_login = _load_saved_login()
     st.write("Enter legal IPTV provider details. The saved login is used for both Live TV and Movies.")
+    if saved_login:
+        st.success("Saved IPTV login loaded for this app.")
+    else:
+        st.warning("No saved IPTV login found in this deployment yet.")
 
     server_url = _normalize_server(
         st.text_input("Server URL", key="iptv_server_url", placeholder="http://provider-server.com:8080")
@@ -187,7 +203,7 @@ def _show_xtream_player():
     with col2:
         clear_login = st.button("Clear IPTV Login", use_container_width=True)
 
-    remember_login = st.checkbox("Remember login in this app", value=CONFIG_PATH.exists())
+    remember_login = st.checkbox("Remember login in this app", value=CONFIG_PATH.exists() or bool(saved_login))
     if remember_login and server_url and username and password:
         _save_login(server_url, username, password)
 
