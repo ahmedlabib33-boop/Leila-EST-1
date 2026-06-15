@@ -10,6 +10,7 @@ PAGES = [
     ("Review Mistakes", "☆  Review"),
     ("Progress", "▟  Progress"),
     ("__live_call__", "♡  Live Call"),
+    ("IPTVSmartersPro", "IPTVSmartersPro"),
 ]
 
 

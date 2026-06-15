@@ -8,6 +8,7 @@ from pages.learning import show_learning
 from pages.mock_exam import show_mock_exam
 from pages.review import show_review
 from pages.progress import show_progress
+from pages.iptv_smarters import show_iptv_smarters
 
 
 st.set_page_config(
@@ -1089,5 +1090,9 @@ elif page == "Review Mistakes":
 elif page == "Progress":
 
     show_progress()
+
+elif page == "IPTVSmartersPro":
+
+    show_iptv_smarters()
 
 show_global_footer()
