@@ -1,13 +1,73 @@
 from pathlib import Path
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
+import base64
+import hashlib
+import hmac
 import json
+import os
 import re
 
 import streamlit as st
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "iptv_login.json"
+ENCRYPTED_CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "iptv_login.enc.json"
+
+
+def _get_secret_value(name):
+    try:
+        value = st.secrets.get(name, "")
+        return str(value) if value else ""
+    except Exception:
+        return ""
+
+
+def _xor_with_key_stream(data, key):
+    output = bytearray()
+    counter = 0
+    while len(output) < len(data):
+        block = hashlib.sha256(key + counter.to_bytes(8, "big")).digest()
+        output.extend(block)
+        counter += 1
+    return bytes(value ^ output[index] for index, value in enumerate(data))
+
+
+def _decrypt_payload(payload, password):
+    try:
+        salt = base64.b64decode(payload["salt"])
+        nonce = base64.b64decode(payload["nonce"])
+        ciphertext = base64.b64decode(payload["ciphertext"])
+        expected_tag = base64.b64decode(payload["tag"])
+    except (KeyError, ValueError, TypeError):
+        return {}
+
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 250000, dklen=32)
+    actual_tag = hmac.new(key, nonce + ciphertext, hashlib.sha256).digest()
+    if not hmac.compare_digest(actual_tag, expected_tag):
+        return {}
+
+    plaintext = _xor_with_key_stream(ciphertext, key + nonce)
+    try:
+        return json.loads(plaintext.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+
+
+def _load_encrypted_login():
+    if not ENCRYPTED_CONFIG_PATH.exists():
+        return {}
+
+    key = _get_secret_value("iptv_encryption_key") or os.environ.get("IPTV_ENCRYPTION_KEY", "")
+    if not key:
+        return {}
+
+    try:
+        payload = json.loads(ENCRYPTED_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return _decrypt_payload(payload, key)
 
 
 def _load_saved_login():
@@ -21,6 +81,10 @@ def _load_saved_login():
             }
     except Exception:
         pass
+
+    encrypted_login = _load_encrypted_login()
+    if encrypted_login:
+        return encrypted_login
 
     if not CONFIG_PATH.exists():
         return {}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "kdf": "pbkdf2_hmac_sha256",
+  "iterations": 250000,
+  "salt": "FOb0K+Iat/tvRiB1y9+ndw==",
+  "nonce": "hq8sxFo0XLaXIoBqn0JPVg==",
+  "ciphertext": "GxnPzpEWWCHuxZG7+LVsXFcqncwG+YLUOAz86BYK3iS8lkbvdn2R0tRaJBwrRClWHsjSl6T25ULJ1+6OCcRrXDw7QyK9E8ksZhHc3UzxRbkoyiGmFFOwGQ==",
+  "tag": "uyngVahB8RvGwmc76QYGCFgcvuOaYZhlnjRWasLsA6M="
+}
