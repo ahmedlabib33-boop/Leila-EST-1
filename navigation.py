@@ -2,6 +2,7 @@ import streamlit as st
 import re
 
 from pages.live_call import get_live_call_url
+from shared_session import read_shared_page, write_shared_page
 
 PAGES = [
     ("Home", "⌂  Home"),
@@ -21,6 +22,18 @@ def _page_key(page):
 def app_navigation():
     if "active_page" not in st.session_state:
         st.session_state.active_page = "Home"
+    if "shared_page_seen_at" not in st.session_state:
+        st.session_state.shared_page_seen_at = 0.0
+
+    shared_page, shared_updated_at = read_shared_page(st.session_state.active_page)
+    valid_pages = {page for page, _ in PAGES if page != "__live_call__"}
+    if (
+        shared_page in valid_pages
+        and shared_updated_at > st.session_state.shared_page_seen_at
+        and shared_page != st.session_state.active_page
+    ):
+        st.session_state.active_page = shared_page
+        st.session_state.shared_page_seen_at = shared_updated_at
 
     active_page = st.session_state.active_page
     active_label = next((label for page, label in PAGES if page == active_page), active_page)
@@ -95,6 +108,7 @@ def app_navigation():
 
             if st.button(label, key=f"nav_{_page_key(page)}", use_container_width=True):
                 st.session_state.active_page = page
+                st.session_state.shared_page_seen_at = write_shared_page(page)
                 st.rerun()
 
     return st.session_state.active_page

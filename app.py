@@ -3,12 +3,19 @@ import streamlit.components.v1 as components
 
 import navigation
 from session import initialize_session
+from pages.live_call import get_live_call_url
 from pages.home import show_home
 from pages.learning import show_learning
 from pages.mock_exam import show_mock_exam
 from pages.review import show_review
 from pages.progress import show_progress
 from pages.iptv_smarters import show_iptv_smarters
+from shared_session import read_shared_notes, write_shared_notes
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:
+    st_autorefresh = None
 
 
 st.set_page_config(
@@ -1050,8 +1057,180 @@ def show_persistent_music_player():
     )
 
 
+def show_persistent_live_call():
+    meet_url = get_live_call_url().replace("prejoinPageEnabled=true", "prejoinPageEnabled=false")
+    components.html(
+        f"""
+        <script>
+        (() => {{
+            const doc = window.parent.document;
+            const version = "1";
+            const existing = doc.getElementById("leila-live-call-panel");
+            if (existing && existing.dataset.version === version) return;
+            if (existing) existing.remove();
+
+            const styleId = "leila-live-call-style";
+            if (!doc.getElementById(styleId)) {{
+                const style = doc.createElement("style");
+                style.id = styleId;
+                style.textContent = `
+                    #leila-live-call-panel {{
+                        position: fixed;
+                        left: 22px;
+                        bottom: 22px;
+                        width: 360px;
+                        height: 285px;
+                        min-width: 260px;
+                        min-height: 52px;
+                        max-width: calc(100vw - 32px);
+                        max-height: calc(100vh - 32px);
+                        z-index: 999996;
+                        background: rgba(255,255,255,.96);
+                        border: 1px solid rgba(232,205,218,.98);
+                        border-radius: 16px;
+                        box-shadow: 0 16px 42px rgba(108,51,99,.18);
+                        overflow: hidden;
+                        resize: both;
+                        font-family: Arial, sans-serif;
+                    }}
+                    #leila-live-call-panel.minimized {{
+                        width: 250px !important;
+                        height: 52px !important;
+                        resize: none;
+                    }}
+                    #leila-live-call-panel.minimized .live-call-body {{
+                        display: none;
+                    }}
+                    #leila-live-call-panel .live-call-header {{
+                        height: 46px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 8px;
+                        padding: 0 10px 0 14px;
+                        cursor: move;
+                        user-select: none;
+                        color: white;
+                        font-weight: 900;
+                        background: linear-gradient(135deg, #f4669c 0%, #db6dbd 52%, #a967e6 100%);
+                    }}
+                    #leila-live-call-panel button {{
+                        border: 0;
+                        border-radius: 999px;
+                        padding: 6px 9px;
+                        cursor: pointer;
+                        font-weight: 800;
+                        background: rgba(255,255,255,.22);
+                        color: white;
+                    }}
+                    #leila-live-call-panel iframe {{
+                        width: 100%;
+                        height: calc(100% - 46px);
+                        border: 0;
+                        display: block;
+                    }}
+                    @media (max-width: 768px) {{
+                        #leila-live-call-panel {{
+                            left: 10px;
+                            bottom: 74px;
+                            width: 300px;
+                            height: 250px;
+                        }}
+                    }}
+                `;
+                doc.head.appendChild(style);
+            }}
+
+            const panel = doc.createElement("div");
+            panel.id = "leila-live-call-panel";
+            panel.dataset.version = version;
+            panel.className = "minimized";
+            panel.innerHTML = `
+                <div class="live-call-header">
+                    <span>Live Call</span>
+                    <span>
+                        <button type="button" data-action="minimize">Open</button>
+                        <button type="button" data-action="popout">Tab</button>
+                    </span>
+                </div>
+                <div class="live-call-body">
+                    <iframe allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write" src="{meet_url}"></iframe>
+                </div>
+            `;
+            doc.body.appendChild(panel);
+
+            const minimize = panel.querySelector('[data-action="minimize"]');
+            minimize.addEventListener("click", () => {{
+                panel.classList.toggle("minimized");
+                minimize.textContent = panel.classList.contains("minimized") ? "Open" : "Hide";
+            }});
+            panel.querySelector('[data-action="popout"]').addEventListener("click", () => {{
+                window.parent.open("{meet_url}", "_blank", "noopener,noreferrer");
+            }});
+
+            const header = panel.querySelector(".live-call-header");
+            let dragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener("pointerdown", (event) => {{
+                if (event.target.tagName === "BUTTON") return;
+                dragging = true;
+                const rect = panel.getBoundingClientRect();
+                dragOffsetX = event.clientX - rect.left;
+                dragOffsetY = event.clientY - rect.top;
+                header.setPointerCapture(event.pointerId);
+            }});
+            header.addEventListener("pointermove", (event) => {{
+                if (!dragging) return;
+                const maxX = window.parent.innerWidth - panel.offsetWidth;
+                const maxY = window.parent.innerHeight - panel.offsetHeight;
+                const nextX = Math.max(0, Math.min(maxX, event.clientX - dragOffsetX));
+                const nextY = Math.max(0, Math.min(maxY, event.clientY - dragOffsetY));
+                panel.style.left = `${{nextX}}px`;
+                panel.style.top = `${{nextY}}px`;
+                panel.style.right = "auto";
+                panel.style.bottom = "auto";
+            }});
+            header.addEventListener("pointerup", () => {{
+                dragging = false;
+            }});
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def show_shared_classroom_sync():
+    if st_autorefresh is not None:
+        st_autorefresh(interval=3500, key="shared_classroom_sync")
+
+    with st.expander("Shared classroom notes", expanded=False):
+        st.caption("Both sides can use this while the live call is open. It updates through the app refresh cycle.")
+        current_notes = read_shared_notes()
+        if (
+            "shared_notes_file_value" not in st.session_state
+            or current_notes != st.session_state.shared_notes_file_value
+        ):
+            st.session_state.shared_explanation_notes = current_notes
+            st.session_state.shared_notes_file_value = current_notes
+
+        notes = st.text_area(
+            "Shared typed explanation",
+            height=120,
+            key="shared_explanation_notes",
+        )
+        if st.button("Save shared notes", use_container_width=True):
+            write_shared_notes(notes)
+            st.session_state.shared_notes_file_value = notes
+            st.success("Shared notes saved.")
+
+
 show_floating_explanation_pad()
 show_persistent_music_player()
+show_persistent_live_call()
+show_shared_classroom_sync()
 
 
 def show_global_footer():

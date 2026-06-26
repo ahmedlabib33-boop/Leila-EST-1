@@ -7,7 +7,12 @@ import streamlit.components.v1 as components
 
 from ai.course_generator.english_course_generator import generate_english_course
 from ai.course_generator.math_course_generator import generate_math_course
-from loaders.learning_loader import load_english_content, load_math_content, load_math_questions
+from loaders.learning_loader import (
+    load_english_content,
+    load_english_questions,
+    load_math_content,
+    load_math_questions,
+)
 
 
 def _text(value):
@@ -669,6 +674,108 @@ def _show_math_lesson_questions(row):
                 st.info(explanation)
 
 
+def _show_english_rule_explanation(row):
+    rule_title = _text(row.get("rule_title"))
+    explanation_parts = _parts(row.get("explanation"))
+    simple_rule = explanation_parts[0] if explanation_parts else "Use this rule to make the sentence clear, correct, and complete."
+    arabic_note = next((part for part in explanation_parts[1:] if "Arabic:" in part), "")
+    example = _text(row.get("example"))
+    tip = _text(row.get("tip"))
+
+    st.write("### Rule")
+    st.info(simple_rule)
+
+    st.write("### Beginner Explanation")
+    st.write(
+        f"Start by asking what job **{rule_title}** does in the sentence. "
+        "Then check the exact words around it before choosing an answer."
+    )
+    if arabic_note:
+        st.caption(arabic_note)
+
+    st.write("### How To Solve It")
+    steps = [
+        "Find the part of the sentence being tested.",
+        f"Apply the rule: {simple_rule}",
+        "Remove choices that break the rule or create unclear meaning.",
+        "Choose the answer that is grammatically correct and easiest to understand.",
+    ]
+    for index, step in enumerate(steps, start=1):
+        st.write(f"{index}. {step}")
+
+    if example:
+        st.write("### Example")
+        st.info(example)
+
+    st.write("### Expert Check")
+    expert_tip = tip or "Check whether the answer is correct in grammar, meaning, and clarity."
+    st.success(expert_tip)
+
+    st.write("### Common EST Trap")
+    st.warning(
+        "Do not choose an answer only because it sounds familiar. EST questions often hide the mistake in agreement, tense, reference, punctuation, or sentence structure."
+    )
+
+
+def _show_english_rule_questions(row):
+    try:
+        questions_df = load_english_questions().fillna("")
+    except FileNotFoundError:
+        st.caption("No English practice questions are available yet.")
+        return
+
+    lesson_title = _text(row.get("lesson_title")).lower()
+    rule_title = _text(row.get("rule_title")).lower()
+
+    rule_questions = questions_df[
+        (questions_df["lesson_title"].apply(lambda value: _text(value).lower()) == lesson_title)
+        & (questions_df["rule_title"].apply(lambda value: _text(value).lower()) == rule_title)
+    ].copy()
+
+    if rule_questions.empty:
+        st.caption("No practice questions are available for this rule yet.")
+        return
+
+    difficulty_order = {"Easy": 0, "Medium": 1}
+    rule_questions["_order"] = rule_questions["difficulty"].map(difficulty_order).fillna(99)
+    rule_questions = rule_questions.sort_values(["_order", "difficulty"]).head(2)
+
+    st.write("##### Practice Questions")
+
+    for question_index, (_, question_row) in enumerate(rule_questions.iterrows(), start=1):
+        difficulty = _text(question_row.get("difficulty"))
+        st.markdown(f"**Question {question_index} ({difficulty})**")
+        st.write(_text(question_row.get("question")))
+
+        options = {
+            "A": _text(question_row.get("option_a")),
+            "B": _text(question_row.get("option_b")),
+            "C": _text(question_row.get("option_c")),
+            "D": _text(question_row.get("option_d")),
+        }
+        option_labels = [f"{letter}. {value}" for letter, value in options.items() if value]
+        answer_key = f"english_question_{lesson_title}_{rule_title}_{difficulty}_{question_index}".replace(" ", "_")
+        selected = st.radio(
+            "Choose your answer",
+            option_labels,
+            index=None,
+            key=answer_key,
+        )
+
+        if selected:
+            selected_letter = selected.split(".", 1)[0]
+            correct_answer = _text(question_row.get("correct_answer")).upper()
+            explanation = _text(question_row.get("explanation"))
+
+            if selected_letter == correct_answer:
+                st.success("💋❤️")
+            else:
+                st.error("Nope 😭, try again pretty Leila ❤️")
+
+            if explanation:
+                st.info(explanation)
+
+
 def _dedupe_geometry_lessons(df):
     if df.empty or _text(df.iloc[0].get("domain")).lower() != "geometry":
         return df
@@ -790,17 +897,5 @@ def _show_english_learning():
         if rule_title:
             st.markdown(f"#### {rule_title}")
 
-        explanation = _text(row.get("explanation"))
-        if explanation:
-            st.write("### Rule")
-            _show_parts(explanation)
-
-        example = _text(row.get("example"))
-        if example:
-            st.write("### Example")
-            st.info(example)
-
-        tip = _text(row.get("tip"))
-        if tip:
-            st.write("### Tip")
-            _show_parts(tip, st.success)
+        _show_english_rule_explanation(row)
+        _show_english_rule_questions(row)

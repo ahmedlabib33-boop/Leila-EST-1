@@ -34,3 +34,9 @@ def load_english_content():
     return pd.read_excel(
         DATA_DIR / "learning_english_content.xlsx"
     )
+
+
+def load_english_questions():
+    return pd.read_excel(
+        DATA_DIR / "learning_english_questions.xlsx"
+    )

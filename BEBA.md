@@ -25,9 +25,11 @@ loaders/
   mock_loader.py     -> reads mock exam Excel files
 
 ai/
-  ai_engine.py        -> calls Ollama tinyllama
+  ai_engine.py        -> calls Ollama model with built-in fallback text
   prompts/            -> prompt builders
   course_generator/   -> math/english AI explanation wrappers
+
+shared_session.py             -> shared selected-page and shared-notes sync files
 ```
 
 ## User Flow
@@ -55,6 +57,10 @@ Start app
   -> Floating Explanation Pad
        -> movable and resizable drawing pad available across all sections
        -> pen, colors, eraser, undo, clear, grid, and download
+  -> Shared Classroom
+       -> floating live call available across all sections
+       -> shared selected-section sync between both browsers
+       -> shared typed explanation notes
   -> Review Mistakes
        -> filter saved mistakes by subject
        -> review question, user answer, correct answer, explanation
@@ -115,10 +121,12 @@ English page features:
 
 - Topic selector by `lesson_title`
 - Rule title display
-- Explanation split by `|`
+- Beginner-to-expert explanation structure for each rule
 - Example display
-- Tip display
-- Optional AI explanation using Ollama
+- Expert tip and common EST trap display
+- Two practice questions for every English rule from `data/learning_english_questions.xlsx`
+- Answer feedback appears only after Leila chooses an option
+- Optional AI explanation using Ollama, with built-in fallback if Ollama is unavailable
 
 ### Mock Exam
 
@@ -149,13 +157,24 @@ Provides a global persistent remote audio/video call launcher using Jitsi Meet.
 
 Persistent call behavior:
 
-1. The launcher appears globally near the top of the app.
-2. User presses `Open Persistent Call`.
-3. The call opens in a separate Jitsi Meet tab.
-4. The app tab remains free for Learning, Mock Exam, Review, and Progress.
-5. Browser camera and microphone permissions must be allowed in the call tab.
+1. A minimized `Live Call` panel appears globally.
+2. User presses `Open` to expand the embedded call while staying inside the app.
+3. User presses `Tab` only if the browser requires a separate call tab for camera or microphone permissions.
+4. The app remains free for Home, Learning, Mock Exam, Review, Progress, and IPTVSmartersPro.
+5. Browser camera and microphone permissions must be allowed.
 
 Important: use the Cloudflare HTTPS public app link for remote access. Camera and microphone permissions can fail on plain HTTP depending on browser settings.
+
+### Shared Classroom Sync
+
+Files: `shared_session.py`, `data/shared_session.json`, `data/shared_explanation_notes.txt`
+
+Shared classroom behavior:
+
+- When either side changes the selected app section, the selected page is written to `data/shared_session.json`.
+- The other browser follows the shared page through the automatic refresh cycle.
+- `Shared classroom notes` stores typed explanations in `data/shared_explanation_notes.txt`.
+- The floating drawing pad is browser-local. For live pen drawings, use the embedded Jitsi call screen-share feature or write typed notes in the shared notes panel.
 
 ### Floating Explanation Pad
 
@@ -238,7 +257,7 @@ Excel workbook in data/
   -> optional AI prompt
   -> ai/course_generator/*
   -> ai/ai_engine.py
-  -> Ollama tinyllama response
+  -> Ollama tinyllama response or built-in fallback lesson
   -> Streamlit output
 ```
 
@@ -319,6 +338,24 @@ Rows: 157
 | `example` | Example sentence or usage |
 | `tip` | Study tip shown with success styling |
 
+### `data/learning_english_questions.xlsx`
+
+Rows: 314
+
+| Column | Meaning |
+| --- | --- |
+| `topic_id` | Links question to an English topic |
+| `lesson_title` | Main English topic |
+| `rule_title` | Individual English rule |
+| `difficulty` | `Easy` or `Medium` |
+| `question` | Practice question text |
+| `option_a` | Answer choice A |
+| `option_b` | Answer choice B |
+| `option_c` | Answer choice C |
+| `option_d` | Answer choice D |
+| `correct_answer` | Correct letter: `A`, `B`, `C`, or `D` |
+| `explanation` | Explanation shown after Leila chooses an answer |
+
 ### `data/mock_english.xlsx`
 
 Rows: 850
@@ -394,21 +431,22 @@ Created in `_grade_exam()` inside `pages/mock_exam.py`.
 
 ## AI Explanation Flow
 
-AI explanations are optional and require Ollama.
+AI explanations try Ollama first. If Ollama or the selected model is unavailable, the app shows a built-in structured explanation instead of failing.
 
 ```text
 Learning page button
   -> generate_math_course(topic) or generate_english_course(topic)
   -> prompt builder in ai/prompts/
   -> generate_text(prompt)
-  -> ollama.chat(model="tinyllama")
+  -> ollama.chat(model=OLLAMA_MODEL or "qwen2.5-coder:7b") or built-in fallback
   -> displayed in Streamlit
 ```
 
-The AI model is configured in `ai/ai_engine.py`:
+The AI model and timeout are configured in `ai/ai_engine.py` and can be overridden with environment variables:
 
 ```python
-model='tinyllama'
+DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
+OLLAMA_TIMEOUT_SECONDS = 25
 ```
 
 ## Requirements
@@ -417,6 +455,7 @@ Install dependencies from `requirements.txt`:
 
 ```text
 streamlit
+streamlit-autorefresh
 pandas
 openpyxl
 ollama
@@ -430,7 +469,7 @@ Run these commands once from the project folder:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-ollama pull tinyllama
+ollama pull qwen2.5-coder:7b
 ```
 
 ## Run The App
