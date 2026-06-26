@@ -400,7 +400,7 @@ def show_floating_explanation_pad():
                     }
                     #leila-floating-pad-reopen {
                         right: 24px !important;
-                        bottom: 74px !important;
+                        bottom: 140px !important;
                     }
                     @media (max-width: 768px) {
                         #leila-floating-pad {
@@ -426,7 +426,7 @@ def show_floating_explanation_pad():
                         }
                         #leila-floating-pad-reopen {
                             right: 10px !important;
-                            bottom: 58px !important;
+                            bottom: 130px !important;
                             padding: 10px 14px !important;
                         }
                     }
@@ -471,7 +471,7 @@ def show_floating_explanation_pad():
             reopen.style.cssText = `
                 position: fixed;
                 right: 24px;
-                bottom: 24px;
+                bottom: 140px;
                 z-index: 999998;
                 display: none;
                 border: 0;
@@ -1076,9 +1076,9 @@ def show_persistent_live_call():
                 style.textContent = `
                     #leila-live-call-panel {{
                         position: fixed;
-                        left: 22px;
-                        bottom: 22px;
-                        width: 360px;
+                        right: 24px;
+                        bottom: 78px;
+                        width: 280px;
                         height: 285px;
                         min-width: 260px;
                         min-height: 52px;
@@ -1094,7 +1094,7 @@ def show_persistent_live_call():
                         font-family: Arial, sans-serif;
                     }}
                     #leila-live-call-panel.minimized {{
-                        width: 250px !important;
+                        width: 235px !important;
                         height: 52px !important;
                         resize: none;
                     }}
@@ -1131,9 +1131,9 @@ def show_persistent_live_call():
                     }}
                     @media (max-width: 768px) {{
                         #leila-live-call-panel {{
-                            left: 10px;
-                            bottom: 74px;
-                            width: 300px;
+                            right: 10px;
+                            bottom: 68px;
+                            width: 220px;
                             height: 250px;
                         }}
                     }}
